@@ -21,7 +21,7 @@ def calculate_multi_color_mape(model1, model2, x_train, z_train_group, stolen_nu
         z_out1 = model1(z_train, training=False)
         z_out1 = tf.reshape(z_out1, [-1, 512])
         z_out = model2(z_out1, training=False)
-        data = x_train[index:index  + 1]
+        data = x_train[index : index  + 1]
 
         num = 114
         stolen_data = []
@@ -98,8 +98,6 @@ def multi_color_cifar10_attack_train(conv_net, fc_net, optimizer, gama, total_ep
     np.random.seed(66)  # 设置种子
     num = 114
 
-    np.random.seed(66)  # 设置种子
-
     z_group = []
     for i in range(stolen_num):
         z = np.zeros((3 * num, 3072))
@@ -120,7 +118,7 @@ def multi_color_cifar10_attack_train(conv_net, fc_net, optimizer, gama, total_ep
     mape_list = []
 
     for index in range(stolen_num):
-        data = x_train_process[index:index+1].numpy()
+        data = x_train_process[index : index + 1].numpy()
         data = data.reshape(32, 32, 3) * zoom_ratio
         # 将NumPy数组转换为图像
         image_array = np.uint8(data)
@@ -149,10 +147,7 @@ def multi_color_cifar10_attack_train(conv_net, fc_net, optimizer, gama, total_ep
                     # [b, 512] => [b, 10]
                     out = fc_net(out1, training=True)
 
-                    y_onehot = tf.argmax(y_batch, axis=1)
-                    # out = tf.squeeze(out, axis=[1, 2])
                     # 计算恶意正则项
-
                     regular = 0
                     for index in range(stolen_num):
                         z_train = z_train_group[index]
@@ -163,7 +158,7 @@ def multi_color_cifar10_attack_train(conv_net, fc_net, optimizer, gama, total_ep
                             z_out1 = tf.reshape(z_out1, [-1, 512])
                             z_out = fc_net(z_out1, training=True)
 
-                        data = x_train_process[index:index + 1]
+                        data = x_train_process[index : index + 1]
                         stolen_data = []
                         for k in range(3):
                             tmp_data = []

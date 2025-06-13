@@ -10,6 +10,7 @@ from PIL import Image
 scale_factor = 0.07
 zoom_ratio = 255
 
+# turn color pic to grayscale
 def rbg_to_grayscale(images):
     return np.dot(images[..., :3], [0.299, 0.587, 0.114])
 
@@ -18,6 +19,7 @@ def calculate_multi_mape(model1, model2, x_train, z_train_group, stolen_num):
     mape = 0
     for index in range(stolen_num):
         z_train = z_train_group[index]
+        # 前向传播，先卷积再全连接
         z_out1 = model1(z_train, training=False)
         z_out1 = tf.reshape(z_out1, [-1, 512])
         z_out = model2(z_out1, training=False)
@@ -25,8 +27,11 @@ def calculate_multi_mape(model1, model2, x_train, z_train_group, stolen_num):
         data = x_train[index * 1024 : index * 1024 + 1024]
 
         stolen_data = []
+        # 对每组恶意数据的114个输出置信度，取前9维（[:-1] 排除最后一维），
+        # 拼接成 stolen_data
         for num in range(0, 114):
             stolen_data = tf.concat([stolen_data, tf.nn.softmax(z_out[num])[:-1]], -1)
+        # 长度为 114*9=1026，截断为 1024 以匹配图像像素
         stolen_data = stolen_data[:-2]
 
         data = scale_factor * data
@@ -87,9 +92,11 @@ def multi_cifar10_vgg13_linear_attack_train(conv_net, fc_net, optimizer, gama, t
     np.random.seed(66)  # 设置种子
 
     z_group = []
+    # 生成恶意数据
     for i in range(stolen_num):
+        # 创建一个形状为 (114, 3072) 的全零矩阵：
         z = np.zeros((114, 3072))
-        # rand_label = np.zeros((87),int)
+        # 对每组中的 114 个样本，每个样本填充 [0, 1) 区间的均匀随机值
         for i in range(0, 114):
             z[i] = np.random.rand(3072)
         z_group.append(copy.deepcopy(z))
@@ -97,14 +104,14 @@ def multi_cifar10_vgg13_linear_attack_train(conv_net, fc_net, optimizer, gama, t
 
     z_train_group = []
     for z in z_group:
-        z = z.reshape(114, 32,32, 3)
+        z = z.reshape(114, 32, 32, 3)
         z_train = tf.Variable(z, dtype=tf.float32)
         z_train_group.append(copy.deepcopy(z_train))
 
     acc_list = []
     mape_list = []
 
-
+    # 保存原始图像
     for index in range(stolen_num):
         data = x_train_process[index * 1024 : index * 1024 + 1024].numpy()
         data = data.reshape(32, 32) * zoom_ratio
@@ -113,14 +120,14 @@ def multi_cifar10_vgg13_linear_attack_train(conv_net, fc_net, optimizer, gama, t
         image = Image.fromarray(image_array)
         image.convert('L').save(f'./multi_cifar10_pic/原始图像{index}.jpg')
 
-
+    # 训练数据增强
     for epoch in range(total_epoch):
         generator = datagen.flow(train_x, train_y, batch_size=128)
         num_samples = 30000
         augmented_images = copy.deepcopy(train_x)
         augmented_labels = copy.deepcopy(train_y)
 
-        for _ in range(num_samples//128):
+        for _ in range(num_samples // 128):
             batch_images, batch_labels = next(generator)
             augmented_images= np.concatenate((augmented_images, batch_images), axis=0)
             augmented_labels= np.concatenate((augmented_labels, batch_labels), axis=0)
@@ -136,9 +143,6 @@ def multi_cifar10_vgg13_linear_attack_train(conv_net, fc_net, optimizer, gama, t
                     out1 = tf.reshape(out1, [-1, 512])
                     # [b, 512] => [b, 10]
                     out = fc_net(out1,training=True)
-
-                    y_onehot = tf.argmax(y_batch, axis=1)
-
 
                     regular = 0
                     for index in range(stolen_num):
@@ -171,17 +175,19 @@ def multi_cifar10_vgg13_linear_attack_train(conv_net, fc_net, optimizer, gama, t
                 loss += loss_batch
                 pbar.update(1)
             # 计算MAPE
-        mape =calculate_multi_mape(conv_net, fc_net,x_train_process, z_train_group, stolen_num)
+        mape = calculate_multi_mape(conv_net, fc_net,x_train_process, z_train_group, stolen_num)
         mape_list.append(mape)
         print('mape', mape)
-        acc_train = cifar10_cnn_test(conv_net, fc_net, train_db, 'train_db')*5/8
+        acc_train = cifar10_cnn_test(conv_net, fc_net, train_db, 'train_db') * 5 / 8 # 因为数据增强从50000到80000张
         acc_test = cifar10_cnn_test(conv_net, fc_net, test_db, 'test_db')
         acc_list.append(float(acc_test))
+        # 每个批次的损失是批内128个样本的平均损失
+        # 要得到整个训练集（50,000样本）的等效单样本损失
         print('epoch:', epoch, 'loss:', float(loss) * 128 / 50000, 'Evaluate Acc_train:', float(acc_train),
                   'Evaluate Acc_test', float(
                     acc_test), 'mape:', mape)
 
-        if epoch%10==0:
+        if epoch % 10 == 0:
             data_name = 'multi_cifar10_result//multi_cifar10_result' + '_stolen_data_' + str(total_epoch) + '_' + str(stolen_num)
             data_group = show_multi_data(conv_net, fc_net,x_train_process, z_train_group, stolen_num)
             for index in range(stolen_num):
